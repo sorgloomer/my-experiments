@@ -19,10 +19,12 @@ namespace WindowsFormsApp1
         private int fpsCounter, fps;
         private TimeSpan lastFpsTurnover;
         
-        private World _world = new World();
+        private World _world = new World(new RigidbodyKdTree());
         private bool drawflag = true;
 
-        private AabbTreeNode _hoveredNode = null;
+        private IRectTreeNode _hoveredNode = null;
+        
+        private Dictionary<IRectTreeNode, DrawnParams> drawns = new Dictionary<IRectTreeNode, DrawnParams>();
         public Form1()
         {
             InitializeComponent();
@@ -63,6 +65,7 @@ namespace WindowsFormsApp1
             b.position = _worldMouse;
             b.positionVelocity = Vec2.Zero;
             b.invMass = 0;
+            _world.Update(b);
             _world.Step(0.02f);
         }
 
@@ -90,8 +93,8 @@ namespace WindowsFormsApp1
         {
             var node = _hoveredNode;
             if (node != null)
-            {
-                DrawNodeRect(node, Pens.Gray);
+            { 
+                DrawNodeRect(node, Pens.Red);
             }
         }
 
@@ -129,7 +132,7 @@ namespace WindowsFormsApp1
                 DrawAabbTree();
             }
             _graphics.DrawString($"{fps:F0} FPS", Font, Brushes.White, 5, 5);
-            _graphics.DrawString($"AABB: {numratio} / {_world.tree.root.depth}", Font, Brushes.White, 5, 20);
+            _graphics.DrawString($"AABB: {numratio} / {-1/*_world.tree.root.depth*/}", Font, Brushes.White, 5, 20);
         }
 
         private void DrawAabbTree()
@@ -140,16 +143,16 @@ namespace WindowsFormsApp1
                 layersize = new Vec2(ClientSize.Width - 250, 15f),
             };
             _hoveredNode = null;
-            DrawTree(_world.tree.root, treeRootDrawParams, treeRootDrawParams);
+            DrawTree(_world.tree.Root, treeRootDrawParams, treeRootDrawParams);
         }
 
         private int DrawRects()
         {
             if (DrawAabbBoxesChecked) {
-                DrawRects(_world.tree.root);
+                DrawRects(_world.tree.Root);
             }
-            var list = new List<AabbTreeNode>();
-            _world.tree.PossibleCollisions(_world.tree.GetBodyFitRect(_world.tree.bodies.Last()), null, list);
+            var list = new List<AabbTreeNode<Rigidbody>>();
+            // _world.tree.PossibleCollisions(_world.tree.GetBodyFitRect(_world.tree.bodies.Last()), null, list);
 
             if (DrawAabbBoxesChecked) {
                 foreach (var n in list)
@@ -159,40 +162,41 @@ namespace WindowsFormsApp1
             }
             return list.Count;
         }
-        private void DrawRects(AabbTreeNode node)
+        private void DrawRects(IRectTreeNode node)
         {
             if (node == null) return;
-            if (node.leaf)
+            if (!node.Children().Any())
             {
                 DrawNodeRect(node, Pens.Gray);
                 return;
             }
             DrawNodeRect(node, Pens.DarkSlateGray);
-            foreach (var c in node.children)
+            foreach (var c in node.Children())
             {
                 DrawRects(c);
             }
         }
-        private void DrawTree(AabbTreeNode node, DrawnParams drawTarget, DrawnParams drawActual)
+        private void DrawTree(IRectTreeNode node, DrawnParams drawTarget, DrawnParams drawActual)
         {
             if (node == null) return;
-            if (node.leaf)
+            if (!node.Children().Any())
             {
                 return;
             }
 
 
             var newDrawActual = drawTarget;
-            if (node.drawn.HasValue)
+            if (drawns.TryGetValue(node, out var drawn))
             {
                 float spd = ClientSize.Width / 50f;
-                newDrawActual = node.drawn.Value.Approach(spd, 2 * spd, drawTarget);
+                newDrawActual = drawn.Approach(spd, 2 * spd, drawTarget);
             }
-            node.drawn = newDrawActual;
+
+            drawns[node] = newDrawActual;
 
 
             int i = 0;
-            foreach (var child in node.children)
+            foreach (var child in node.Children())
             {
                 var childDrawActual = ComputeChildDrawLocation(node, i, newDrawActual);
                 var pen = Pens.Green;
@@ -208,7 +212,7 @@ namespace WindowsFormsApp1
                     childDrawActual.position.x,
                     childDrawActual.position.y
                 );
-                if (!child.leaf)
+                if (child.Children().Any())
                 {
                     var childDrawTarget = ComputeChildDrawLocation(node, i, drawTarget);
                     DrawTree(child, childDrawTarget, childDrawActual);
@@ -217,28 +221,31 @@ namespace WindowsFormsApp1
             }
         }
 
-        private static DrawnParams ComputeChildDrawLocation(AabbTreeNode node, int childIndex, DrawnParams parentDrawParams)
+        private static DrawnParams ComputeChildDrawLocation(IRectTreeNode node, int childIndex, DrawnParams parentDrawParams)
         {
-            float temp = (childIndex + 1) / (float) (node.children.Count + 1) - 0.5f;
+            int count = node.Children().Count();
+            float temp = (childIndex + 1) / (float) (count + 1) - 0.5f;
             return new DrawnParams
             {
                 position = parentDrawParams.position + new Vec2(parentDrawParams.layersize.x * temp, parentDrawParams.layersize.y),
-                layersize =new Vec2(parentDrawParams.layersize.x * (1f / node.children.Count), parentDrawParams.layersize.y),
+                layersize = new Vec2(parentDrawParams.layersize.x * (1f / count), parentDrawParams.layersize.y),
             };
         }
-
-        private void DrawNodeRect(AabbTreeNode node, Pen pen)
+        private void DrawNodeRect(IRectTreeNode node, Pen pen)
         {
-            _graphics.DrawRectangle(
-                pen,
-                node.bounds.min.x,
-                node.bounds.min.y,
-                node.bounds.max.x - node.bounds.min.x,
-                node.bounds.max.y - node.bounds.min.y
-            );
+            if (node.Bounds.With(out var bounds))
+            {
+                _graphics.DrawRectangle(
+                    pen,
+                    bounds.min.x,
+                    bounds.min.y,
+                    bounds.max.x - bounds.min.x,
+                    bounds.max.y - bounds.min.y
+                );
+            }
         }
 
-        private Color TreeColor(AabbTreeNode node)
+        private Color TreeColor(AabbTreeNode<Rigidbody> node)
         {
             var x = 200 - node.depth * 20;
             return Color.FromArgb(255, x, x, x);
@@ -311,7 +318,7 @@ namespace WindowsFormsApp1
 
         private void UpdateTreeBalancingSetting()
         {
-            _world.tree.balanceEnableRotations = cbEnableRotations.Checked;
+            // _world.tree.balanceEnableRotations = cbEnableRotations.Checked;
         }
     }
 }

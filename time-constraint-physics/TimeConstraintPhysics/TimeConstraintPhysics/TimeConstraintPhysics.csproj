@@ -4,10 +4,10 @@
     <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
         <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-        <ProjectGuid>{CF929006-6ABB-4DDF-A5FE-D642F273FDE3}</ProjectGuid>
+        <ProjectGuid>{7365C7BC-F26B-4D90-847A-7771EE097BF5}</ProjectGuid>
         <OutputType>WinExe</OutputType>
-        <RootNamespace>WindowsFormsApp1</RootNamespace>
-        <AssemblyName>WindowsFormsApp1</AssemblyName>
+        <RootNamespace>TimeConstraintPhysics</RootNamespace>
+        <AssemblyName>TimeConstraintPhysics</AssemblyName>
         <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
         <FileAlignment>512</FileAlignment>
         <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -52,32 +52,9 @@
         <Compile Include="Form1.Designer.cs">
             <DependentUpon>Form1.cs</DependentUpon>
         </Compile>
-        <Compile Include="PhysicsEngine\BodyType.cs" />
-        <Compile Include="PhysicsEngine\Capsule.cs" />
-        <Compile Include="PhysicsEngine\CapsuleCache.cs" />
-        <Compile Include="PhysicsEngine\Circle.cs" />
-        <Compile Include="PhysicsEngine\ClosestPoints.cs" />
-        <Compile Include="PhysicsEngine\Contact.cs" />
-        <Compile Include="PhysicsEngine\Mathf.cs" />
-        <Compile Include="PhysicsEngine\MoreLinq.cs" />
-        <Compile Include="PhysicsEngine\Rigidbody.cs" />
-        <Compile Include="PhysicsEngine\Transform.cs" />
-        <Compile Include="PhysicsEngine\Trees\AabbTree\AabbTree.cs" />
-        <Compile Include="PhysicsEngine\Trees\AabbTree\AabbTreeNode.cs" />
-        <Compile Include="PhysicsEngine\Trees\AabbTree\TreeType.cs" />
-        <Compile Include="PhysicsEngine\Trees\AaRect.cs" />
-        <Compile Include="PhysicsEngine\Trees\AaRects.cs" />
-        <Compile Include="PhysicsEngine\Trees\BoundingRects.cs" />
-        <Compile Include="PhysicsEngine\Trees\IRectTreeNode.cs" />
-        <Compile Include="PhysicsEngine\Trees\ISpatialTree2D.cs" />
-        <Compile Include="PhysicsEngine\Trees\KDBoxTree\KdTree.cs" />
-        <Compile Include="PhysicsEngine\Trees\KDBoxTree\KdTreeNode.cs" />
-        <Compile Include="PhysicsEngine\Trees\RigidbodyTree.cs" />
-        <Compile Include="PhysicsEngine\Utils.cs" />
-        <Compile Include="PhysicsEngine\Vec2.cs" />
-        <Compile Include="PhysicsEngine\World.cs" />
         <Compile Include="Program.cs" />
         <Compile Include="Properties\AssemblyInfo.cs" />
+        <Compile Include="Vec2.cs" />
         <EmbeddedResource Include="Form1.resx">
           <DependentUpon>Form1.cs</DependentUpon>
         </EmbeddedResource>

@@ -1,169 +1,234 @@
-﻿using System.Collections.Generic;
-using System.Management.Instrumentation;
-using System.Windows.Forms;
+﻿using System;
+using System.Collections.Generic;
 
 namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 {
-    public class KdTree<T> : AbstractTree<T>
+    public abstract class KdTree<T> : AbstractTree<T>
     {
-        public KdTreeNode<T> root;
+        public KdTreeNode<T> root = new KdTreeNode<T>();
 
-        private Dictionary<Rigidbody, KdTreeNode<T>> leaves = new Dictionary<Rigidbody, KdTreeNode<T>>();
-        private HashSet<Rigidbody> bodies = new HashSet<Rigidbody>();
-        private int newRefresh = 10000;
+        private Dictionary<T, KdTreeHolder<T>> leaves = new Dictionary<T, KdTreeHolder<T>>();
+        internal int newRefresh = 10000;
         
-        private BoundingRects rects = new BoundingRects();
+        private RebalanceQueue<T> rebalance;
+        
+        public List<KdTreeHolder<T>> tempHolderList = new List<KdTreeHolder<T>>();
 
-        public void AddOrUpdate(Rigidbody rigidbody)
+        public override IRectTreeNode Root => root;
+        public abstract AaRect GetBodyFitRect(T body);
+        public abstract AaRect GetBodyFatRect(T body);
+        
+        
+        public override bool Contains(T body)
         {
-            bodies.Add(rigidbody);
-            if (leaves.TryGetValue(rigidbody, out var leaf))
+            return leaves.ContainsKey(body);
+        }
+        
+        public override bool Remove(T body)
+        {
+            if (leaves.TryGetValue(body, out var holder))
             {
-                if (leaf.bounds.Contains(rects.GetBodyFitRect(rigidbody)))
-                {
-                    // body still in fat rect, skipping
-                    if (leaf.refresh > 0)
-                    {
-                        leaf.refresh--;
-                        return;
-                    }
-                }
-                Remove(leaf);
-                leaf.bounds = rects.GetBodyFatRect(rigidbody);
-                leaf.refresh = newRefresh;
+                var node = holder.parent;
+                RemoveInternal(holder);
+                leaves.Remove(body);
+                RefreshAndMarkParents(node);
+                return true;
             }
-            else
-            {
-                leaf = new KdTreeNode()
-                {
-                    leaf = true,
-                    rigidbody = rigidbody, 
-                    bounds = rects.GetBodyFatRect(rigidbody),
-                    count = 1,
-                    refresh = newRefresh,
-                };
-            }
-
-            root = Add(null, root, leaf);
+            return false;
         }
 
-        public KdTreeNode Add(KdTreeNode parent, KdTreeNode node, KdTreeNode leaf)
+        public override void TraverseOverlapping(T body, Action<T> action)
         {
-            if (node == null)
+            TraverseOverlapping(root, GetBodyFitRect(body), action);
+        }
+
+        private void TraverseOverlapping(KdTreeNode<T> node, AaRect rect, Action<T> action)
+        {
+            if (node.type == NodeType.Leaf)
             {
-                leaf.parent = parent;
-                return leaf;
+                var holder = node.leaf.holder;
+                while (holder != null)
+                {
+                    if (AaRect.Overlaps(rect, holder.fitRect))
+                    {
+                        action(holder.body);
+                    }
+                    holder = holder.sibling.next;
+                }
+            }
+            else
+            {
+                var pos = node.DetermineInnerNodePosition(rect);
+                if (pos != ChildPosition.More)
+                    TraverseOverlapping(node.inner.nodeLess, rect, action);
+                if (pos != ChildPosition.Less)
+                    TraverseOverlapping(node.inner.nodeMore, rect, action);
+                TraverseOverlapping(node.inner.nodeMiddle, rect, action);
+            }
+        }
+
+        public override IEnumerable<T> GetAll()
+        {
+            return leaves.Keys;
+        }
+
+        
+        public override bool Add(T body)
+        {
+            if (leaves.TryGetValue(body, out var holder))
+            {
+                UpdateInternal(holder);
+                RebalanceOne();
+                return false;
             }
 
-            if (node.leaf)
+            holder = new KdTreeHolder<T>()
             {
-                return Split(node, leaf);
+                body = body,
+                fitRect = GetBodyFatRect(body),
+                fatRect = GetBodyFitRect(body),
+            };
+            leaves[body] = holder;
+            AddNewInternal(holder);
+            RebalanceOne();
+            return true;
+        }
+
+
+        private void RebalanceOne()
+        {
+            KdTreeNode<T> node;
+            for (;;)
+            { 
+                node = DequeueRebalanceQueue();
+                if (node == null) return;
+                if (IsNodeUnbalanced(node)) break;
             }
-            float lmin, lmax;
-            float pivot = node.pivot;
+
+            node.Rebalance(this);
+        }
+        private void AddNewInternal(KdTreeHolder<T> holder)
+        {
+            KdTreeNode<T> fittingLeaf = DetermineFittingLeaf(holder);
+            AddInternal(holder, fittingLeaf);
+            RefreshAndMarkParents(fittingLeaf);
+        }
+
+        private void UpdateInternal(KdTreeHolder<T> holder)
+        {
+            if (!holder.Update(this))
+            {
+                return;
+            }
+            KdTreeNode<T> oldLeaf = holder.parent;
+            KdTreeNode<T> newLeaf = DetermineFittingLeaf(holder);
+            if (oldLeaf == newLeaf)
+            {
+                return;
+            }
+
+            RemoveInternal(holder);
+            AddInternal(holder, newLeaf);
             
-            if (node.axis == 0)
-            {
-                lmin = leaf.bounds.min.x;
-                lmax = leaf.bounds.max.x;
-            }
-            else
-            {
-                lmin = leaf.bounds.min.y;
-                lmax = leaf.bounds.max.y;
-            }
+            RefreshAndMarkParents(oldLeaf);
+            RefreshAndMarkParents(newLeaf);
+        }
 
-            if (lmax < pivot)
+        private void RefreshAndMarkParents(KdTreeNode<T> node)
+        {
+            while (node != null)
             {
-                node.nodeLess = Add(node, node.nodeLess, leaf);
+                node.RefreshBounds();
+                MarkRebalanceIfNeeded(node);
+                node = node.parent;
             }
-            else if (lmin > pivot)
-            {
-                node.nodeMore = Add(node, node.nodeMore, leaf);
-            }
-            else
-            {
-                node.nodeMiddle = Add(node, node.nodeMiddle, leaf);
-            }
+        }
 
+        public void MarkRebalanceIfNeeded(KdTreeNode<T> node)
+        {
+            if (!node.rebalance.added && IsNodeUnbalanced(node))
+            {
+                DeferRebalance(node);
+            }
+        }
 
-            node.count = node.nodeLess?.count ?? 0 + node.nodeMiddle?.count ?? 0 + node.nodeMore?.count ?? 0;
-            node.bounds = rects.MergeNullable(node.nodeLess?.bounds, node.nodeMiddle?.bounds, node.nodeMore?.bounds).Value;
+        private bool IsNodeUnbalanced(KdTreeNode<T> node)
+        {
+            int sideThreshold = node.count * 2 / 3;
+            if (node.type == NodeType.Inner)
+            {
+                return node.count <= 1 || node.inner.nodeLess.count > sideThreshold || node.inner.nodeMore.count > sideThreshold; 
+            }
+            return node.count > 1;
+        }
+
+        private void AddInternal(KdTreeHolder<T> holder, KdTreeNode<T> newParent)
+        {
+            holder.AddToHolderList(newParent);
+            var node = newParent;
+            while (node != null)
+            {
+                node.count++;
+                node = node.parent;
+            }
+        }
+
+        private void RemoveInternal(KdTreeHolder<T> holder)
+        {
+            var node = holder.parent;
+            holder.RemoveFromHolderList();
+            while (node != null)
+            {
+                node.count--;
+                node = node.parent;
+            }
+        }
+        
+        private KdTreeNode<T> DetermineFittingLeaf(KdTreeHolder<T> holder)
+        {
+            var node = root;
+            while (node.type == NodeType.Inner)
+            {
+                node = node.DetermineInnerNode(holder);
+            }
             return node;
         }
-
-        private KdTreeNode Split(KdTreeNode node1, KdTreeNode node2)
+        
+        private bool DeferRebalance(KdTreeNode<T> node)
         {
-            var bounds = AaRect.Merge(node1.bounds, node2.bounds);
-            var size = bounds.GetSize();
-            var axis = size.x > size.y ? 0 : 1;
-            float min1, max1, min2, max2;
-            if (axis == 0)
+            if (node.rebalance.added)
             {
-                min1 = node1.bounds.min.x;
-                max1 = node1.bounds.max.x;
-                min2 = node2.bounds.min.x;
-                max2 = node2.bounds.max.x;
+                return false;
+            }
+            node.rebalance.added = true;
+            node.rebalance.next = null;
+            if (rebalance.last != null)
+            {
+                rebalance.last.rebalance.next = node;
             }
             else
             {
-                min1 = node1.bounds.min.y;
-                max1 = node1.bounds.max.y;
-                min2 = node2.bounds.min.y;
-                max2 = node2.bounds.max.y;
+                rebalance.first = node;
             }
-            
-            var result = new KdTreeNode()
+            rebalance.last = node;
+            return true;
+        }
+        
+        private KdTreeNode<T> DequeueRebalanceQueue()
+        {
+            var result = rebalance.first;
+            if (result == null)
             {
-                axis = axis,
-                leaf = false,
-                count = node1.count + node2.count,
-                bounds = bounds,
-            };
-
-            if (max1 < min2)
-            {
-                result.pivot = (max1 + min2) / 2;
-                result.nodeLess = node1;
-                result.nodeMore = node2;
-            } 
-            else if (max2 < min1)
-            {
-                result.pivot = (max2 + min1) / 2;
-                result.nodeLess = node2;
-                result.nodeMore = node1;
+                return null;
             }
-            else if (max1 - min1 < )
+            var newfirst = result.rebalance.next; 
+            rebalance.first = newfirst;
+            if (newfirst == null)
             {
-                
+                rebalance.last = null;
             }
-            
+            result.rebalance.added = false;
             return result;
         }
-
-        private void Remove(KdTreeNode node)
-        {
-            for (;;)
-            {
-                var parent = node.parent;
-                if (parent == null)
-                {
-                    root = null;
-                    return;
-                }
-                if (parent.nodeLess == node) parent.nodeLess = null;
-                if (parent.nodeMiddle == node) parent.nodeMiddle = null;
-                if (parent.nodeMore == node) parent.nodeMore = null;
-                if (parent.count > node.count)
-                {
-                    parent.count -= node.count;
-                    return;
-                }
-                node = parent;
-            }
-
-
-        }
-
     }
 }

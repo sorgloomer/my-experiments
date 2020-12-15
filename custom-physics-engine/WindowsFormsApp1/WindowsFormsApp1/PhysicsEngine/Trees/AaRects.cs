@@ -38,5 +38,15 @@ namespace WindowsFormsApp1.PhysicsEngine
         {
             return MergeNullable(MergeNullable(r0, r1), MergeNullable(r2, r3));
         }
+
+        public static bool Include(ref AaRect bounds, AaRect newrect)
+        {
+            if (bounds.Contains(newrect))
+            {
+                return false;
+            }
+            bounds = AaRect.Merge(bounds, newrect);
+            return true;
+        }
     }
 }

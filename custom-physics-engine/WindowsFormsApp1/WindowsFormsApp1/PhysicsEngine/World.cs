@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
     public class World
     {
-        public AabbTree tree;
+        public ISpatialTree2D<Rigidbody> tree;
         public List<ContactHalf> contacts = new List<ContactHalf>();
         public List<Vec2> notables = new List<Vec2>();
         private int substeps = 5;
@@ -14,7 +15,12 @@ namespace WindowsFormsApp1.PhysicsEngine
         public float angularDamping = 0.20f;
         public float maxPositionVelocity = 1000f;
         public float maxAngularVelocity = 40 * Mathf.TWO_PI;
+        private List<Rigidbody> tempList = new List<Rigidbody>();
 
+        public void Update(Rigidbody rigidbody)
+        {
+            tree.Add(rigidbody);
+        }
         public void Step(float full_dt)
         {
             var dt = full_dt / substeps;
@@ -23,8 +29,7 @@ namespace WindowsFormsApp1.PhysicsEngine
             var positionDampCoeff = Mathf.Pow(1f - positionDamping, dt);
             var angularDampCoeff = Mathf.Pow(1f - angularDamping, dt);
 
-            tree.Rebuild();
-            foreach (var body in tree.bodies)
+            foreach (var body in tree.GetAll())
             {
                 body.positionVelocity = body.positionVelocity.Clamp(maxPositionVelocity);
                 body.angularVelocity = Mathf.ClampSymmetric(body.angularVelocity, maxAngularVelocity);
@@ -33,7 +38,7 @@ namespace WindowsFormsApp1.PhysicsEngine
             }
             for (var substep = 0; substep < substeps; substep++)
             {
-                foreach (var body in tree.bodies)
+                foreach (var body in tree.GetAll())
                 {
                     if (body.type == BodyType.Dynamic) {
                         body.position += gravity_dp;
@@ -50,19 +55,22 @@ namespace WindowsFormsApp1.PhysicsEngine
                     UpdateBodyCache(body);
                 }
 
-                foreach (var body in tree.bodies)
+                foreach (var body in tree.GetAll())
                 {
-                    tree.AddOrUpdate(body);
+                    tree.Add(body);
                 }
 
                 contacts.Clear();
                 notables.Clear();
 
-                foreach (var body0 in tree.bodies)
+                foreach (var body0 in tree.GetAll())
                 {
-                    tree.PossibleCollisions(tree.rects.GetBodyFitRect(body0), body1 =>
+                    tempList.Clear();
+                    tree.TraverseOverlapping(body0, tempList.Add);
+
+                    foreach (var body1 in tempList)
                     {
-                        if (body0 == body1) return;
+                        if (body0 == body1) continue;
                         ClosestPoints p = CapsuleCache.Collide(
                             body0.fixtureCache,
                             body1.fixtureCache,
@@ -79,14 +87,14 @@ namespace WindowsFormsApp1.PhysicsEngine
                                 UpdateBodyCache(body1);
                             }
                         }
-                    }, null);
+                    }
                 }
-                foreach (var body in tree.bodies)
+                foreach (var body in tree.GetAll())
                 {
-                    tree.AddOrUpdate(body);
+                    tree.Add(body);
                 }
             }
-            foreach (var body in tree.bodies)
+            foreach (var body in tree.GetAll())
             {
                 var invDt = 1f / dt;
                 body.positionVelocity = (body.position - body.lastPosition) * invDt;
@@ -191,7 +199,7 @@ namespace WindowsFormsApp1.PhysicsEngine
         {
             return -Mathf.Floor(a / b) * b;
         }
-        public World()
+        public World(ISpatialTree2D<Rigidbody> tree)
         {
             var bodies = new List<Rigidbody>()
             {
@@ -243,12 +251,16 @@ namespace WindowsFormsApp1.PhysicsEngine
             bodies[bodies.Count - 1].fixture.p0 *= 8f;
             bodies[bodies.Count - 1].fixture.p1 *= 8f;
             
-            tree = new AabbTree();
+            this.tree = tree;
             var counter = 0;
-            bodies.ForEach(b => b.index = counter++);
-            tree.AddOrUpdateRange(bodies);
+            foreach (var body in bodies)
+            {
+                body.index = counter++;
+                UpdateBodyCache(body);
+            }
+            tree.AddRange(bodies);
         }
         
-        public IEnumerable<Rigidbody> Bodies => tree.bodies;
+        public IEnumerable<Rigidbody> Bodies => tree.GetAll();
     }
 }

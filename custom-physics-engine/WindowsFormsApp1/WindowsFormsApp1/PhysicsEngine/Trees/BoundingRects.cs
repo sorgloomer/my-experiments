@@ -4,8 +4,8 @@ namespace WindowsFormsApp1.PhysicsEngine
 {
     public class BoundingRects
     {
-        public float fatSizeFactor = 0.3f;
-        public float fatVelocityFactor = 0.25f;
+        public float fatSizeFactor = 0.2f;
+        public float fatVelocityFactor = 0.2f;
 
         public AaRect GetBodyFitRect(Rigidbody body)
         {

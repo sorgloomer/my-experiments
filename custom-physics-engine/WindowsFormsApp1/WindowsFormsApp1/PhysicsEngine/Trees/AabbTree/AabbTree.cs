@@ -4,21 +4,6 @@ using System.Linq;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
-    public class RigidbodyAabbTree : AabbTree<Rigidbody>
-    {
-        public BoundingRects rects = new BoundingRects();
-        
-        public override AaRect GetBodyFitRect(Rigidbody body)
-        {
-            return rects.GetBodyFitRect(body);
-        }
-
-        public override AaRect GetBodyFatRect(Rigidbody body)
-        {
-            return rects.GetBodyFatRect(body);
-        }
-    }
-
     public abstract class AabbTree<T> : AbstractTree<T>
     {
         public AabbTreeNode<T> root;
@@ -39,6 +24,8 @@ namespace WindowsFormsApp1.PhysicsEngine
 
         public abstract AaRect GetBodyFitRect(T body);
         public abstract AaRect GetBodyFatRect(T body);
+        
+        public override IRectTreeNode Root => root;
 
         public override bool Contains(T body)
         {
@@ -315,8 +302,9 @@ namespace WindowsFormsApp1.PhysicsEngine
             return (a, b) => comparer.Compare(selector(a), selector(b));
         }
 
-        public override void TraverseOverlapping(AaRect rect, Action<T> action)
+        public override void TraverseOverlapping(T queryBody, Action<T> action)
         {
+            var rect = GetBodyFitRect(queryBody); 
             if (type == TreeType.Bag)
             {
                 var skipped = 0;

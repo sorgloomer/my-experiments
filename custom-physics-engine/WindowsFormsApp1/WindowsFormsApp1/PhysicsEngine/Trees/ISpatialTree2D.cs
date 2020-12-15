@@ -3,23 +3,27 @@ using System.Collections.Generic;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
-    public interface ITree<T>
+    public interface ISpatialTree2D<T>
     {
         bool Contains(T body);
         bool Add(T body);
         bool Remove(T body);
-        void TraverseOverlapping(AaRect rect, Action<T> action);
+        void TraverseOverlapping(T body, Action<T> action);
         IEnumerable<T> GetAll();
         void AddRange(IEnumerable<T> bodies);
+        
+        IRectTreeNode Root { get; }
     }
 
-    public abstract class AbstractTree<T> : ITree<T>
+    public abstract class AbstractTree<T> : ISpatialTree2D<T>
     {
         public abstract bool Contains(T body);
         public abstract bool Add(T body);
         public abstract bool Remove(T body);
-        public abstract void TraverseOverlapping(AaRect rect, Action<T> action);
+        public abstract void TraverseOverlapping(T body, Action<T> action);
         public abstract IEnumerable<T> GetAll();
+
+        public abstract IRectTreeNode Root { get; }
 
         public void AddRange(IEnumerable<T> bodies)
         {
@@ -28,5 +32,6 @@ namespace WindowsFormsApp1.PhysicsEngine
                 Add(b);
             }
         }
+
     }
 }

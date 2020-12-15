@@ -2,7 +2,7 @@
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
-    public class AabbTreeNode<T>
+    public class AabbTreeNode<T> : IRectTreeNode
     {
         public DrawnParams? drawn;
         public int fatsleep;
@@ -12,6 +12,8 @@ namespace WindowsFormsApp1.PhysicsEngine
         public T body;
         public bool leaf;
         public int depth;
+        public AaRect? Bounds => bounds;
+        public IEnumerable<IRectTreeNode> Children() => children;
     }
 
     public struct DrawnParams
