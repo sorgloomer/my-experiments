@@ -6,6 +6,25 @@ namespace WindowsFormsApp1.PhysicsEngine
     {
         public Vec2 min, max;
 
+        public static AaRect xyxy(float minx, float miny, float maxx, float maxy)
+        {
+            return mm(Vec2.xy(minx, miny), Vec2.xy(maxx, maxy));
+        }
+
+        public static AaRect mm(Vec2 min, Vec2 max)
+        {
+            return new AaRect(min, max);
+        }
+
+        public static AaRect mm(float minx, float miny, Vec2 max)
+        {
+            return mm(Vec2.xy(minx, miny), max);
+        }
+        public static AaRect mm(Vec2 min, float maxx, float maxy)
+        {
+            return mm(min, Vec2.xy(maxx, maxy));
+        }
+
         public AaRect(Vec2 min, Vec2 max)
         {
             this.min = min;

@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
-    public abstract class AabbTree<T> : AbstractTree<T>
+    public abstract class AabbTree<T> : AbstractSpatialIndex<T>
     {
         public AabbTreeNode<T> root;
         public HashSet<T> bodies = new HashSet<T>();
@@ -21,9 +21,6 @@ namespace WindowsFormsApp1.PhysicsEngine
 
         public readonly TreeType type = TreeType.Tree;
         private Dictionary<T, AabbTreeNode<T>> bodyNodes = new Dictionary<T, AabbTreeNode<T>>();
-
-        public abstract AaRect GetBodyFitRect(T body);
-        public abstract AaRect GetBodyFatRect(T body);
         
         public override IRectTreeNode Root => root;
 

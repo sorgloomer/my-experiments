@@ -68,8 +68,9 @@
         <Compile Include="PhysicsEngine\Trees\AaRect.cs" />
         <Compile Include="PhysicsEngine\Trees\AaRects.cs" />
         <Compile Include="PhysicsEngine\Trees\BoundingRects.cs" />
+        <Compile Include="PhysicsEngine\Trees\Dummy\DummySpatialIndex.cs" />
         <Compile Include="PhysicsEngine\Trees\IRectTreeNode.cs" />
-        <Compile Include="PhysicsEngine\Trees\ISpatialTree2D.cs" />
+        <Compile Include="PhysicsEngine\Trees\ISpatialIndex.cs" />
         <Compile Include="PhysicsEngine\Trees\KDBoxTree\KdTree.cs" />
         <Compile Include="PhysicsEngine\Trees\KDBoxTree\KdTreeNode.cs" />
         <Compile Include="PhysicsEngine\Trees\RigidbodyTree.cs" />

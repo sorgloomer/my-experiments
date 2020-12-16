@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
-    public interface ISpatialTree2D<T>
+    public interface ISpatialIndex<T>
     {
         bool Contains(T body);
         bool Add(T body);
@@ -15,7 +15,7 @@ namespace WindowsFormsApp1.PhysicsEngine
         IRectTreeNode Root { get; }
     }
 
-    public abstract class AbstractTree<T> : ISpatialTree2D<T>
+    public abstract class AbstractSpatialIndex<T> : ISpatialIndex<T>
     {
         public abstract bool Contains(T body);
         public abstract bool Add(T body);
@@ -24,6 +24,10 @@ namespace WindowsFormsApp1.PhysicsEngine
         public abstract IEnumerable<T> GetAll();
 
         public abstract IRectTreeNode Root { get; }
+        
+        public abstract AaRect GetBodyFitRect(T body);
+
+        public abstract AaRect GetBodyFatRect(T body);
 
         public void AddRange(IEnumerable<T> bodies)
         {

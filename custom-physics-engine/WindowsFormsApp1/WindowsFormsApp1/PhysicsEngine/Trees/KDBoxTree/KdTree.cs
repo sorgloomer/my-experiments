@@ -3,22 +3,21 @@ using System.Collections.Generic;
 
 namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 {
-    public abstract class KdTree<T> : AbstractTree<T>
+    public abstract class KdTree<T> : AbstractSpatialIndex<T>
     {
         public KdTreeNode<T> root = new KdTreeNode<T>();
 
         private Dictionary<T, KdTreeHolder<T>> leaves = new Dictionary<T, KdTreeHolder<T>>();
         internal int newRefresh = 10000;
+        private int rebalanceDivider = 10;
+        private int rebalanceCounter = 0;
         
         private RebalanceQueue<T> rebalance;
         
         public List<KdTreeHolder<T>> tempHolderList = new List<KdTreeHolder<T>>();
 
         public override IRectTreeNode Root => root;
-        public abstract AaRect GetBodyFitRect(T body);
-        public abstract AaRect GetBodyFatRect(T body);
-        
-        
+
         public override bool Contains(T body)
         {
             return leaves.ContainsKey(body);
@@ -28,10 +27,10 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
         {
             if (leaves.TryGetValue(body, out var holder))
             {
-                var node = holder.parent;
+                var oldParent = holder.parent;
                 RemoveInternal(holder);
                 leaves.Remove(body);
-                RefreshAndMarkParents(node);
+                RefreshAndMarkParents(oldParent);
                 return true;
             }
             return false;
@@ -77,7 +76,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
         {
             if (leaves.TryGetValue(body, out var holder))
             {
-                UpdateInternal(holder);
+                UpdateAndRefreshInternal(holder);
                 RebalanceOne();
                 return false;
             }
@@ -89,7 +88,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 fatRect = GetBodyFitRect(body),
             };
             leaves[body] = holder;
-            AddNewInternal(holder);
+            AddAndRefreshInternal(holder);
             RebalanceOne();
             return true;
         }
@@ -97,25 +96,44 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 
         private void RebalanceOne()
         {
+            AssertConsistency();
+            if (rebalanceCounter > 0)
+            {
+                rebalanceCounter--;
+                return;
+            }
+            rebalanceCounter = rebalanceDivider;
             KdTreeNode<T> node;
             for (;;)
             { 
                 node = DequeueRebalanceQueue();
-                if (node == null) return;
-                if (IsNodeUnbalanced(node)) break;
+                if (node == null)
+                {
+                    return;
+                }
+                if (!node.deleted && IsNodeUnbalanced(node))
+                {
+                    AssertConsistency();
+                    node.Rebalance(this);
+                    RefreshAndMarkParents(node);
+                    AssertConsistency();
+                    return;
+                }
             }
-
-            node.Rebalance(this);
         }
-        private void AddNewInternal(KdTreeHolder<T> holder)
+        
+        private void AddAndRefreshInternal(KdTreeHolder<T> holder)
         {
+            AssertConsistency();
             KdTreeNode<T> fittingLeaf = DetermineFittingLeaf(holder);
             AddInternal(holder, fittingLeaf);
             RefreshAndMarkParents(fittingLeaf);
+            AssertConsistency();
         }
 
-        private void UpdateInternal(KdTreeHolder<T> holder)
+        private void UpdateAndRefreshInternal(KdTreeHolder<T> holder)
         {
+            AssertConsistency();
             if (!holder.Update(this))
             {
                 return;
@@ -124,14 +142,16 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             KdTreeNode<T> newLeaf = DetermineFittingLeaf(holder);
             if (oldLeaf == newLeaf)
             {
+                RefreshAndMarkParents(oldLeaf);
                 return;
             }
 
+            AssertConsistency();
             RemoveInternal(holder);
             AddInternal(holder, newLeaf);
-            
             RefreshAndMarkParents(oldLeaf);
             RefreshAndMarkParents(newLeaf);
+            AssertConsistency();
         }
 
         private void RefreshAndMarkParents(KdTreeNode<T> node)
@@ -154,12 +174,29 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 
         private bool IsNodeUnbalanced(KdTreeNode<T> node)
         {
-            int sideThreshold = node.count * 2 / 3;
             if (node.type == NodeType.Inner)
             {
-                return node.count <= 1 || node.inner.nodeLess.count > sideThreshold || node.inner.nodeMore.count > sideThreshold; 
+                int sideThreshold = node.count * 2 / 3;
+                int middleThreshold = node.count * 1 / 3;
+                if (node.count <= 1)
+                {
+                    return true;
+                }
+                if (node.inner.nodeLess.count > sideThreshold)
+                {
+                    return true;
+                }
+                if (node.inner.nodeMore.count > sideThreshold)
+                {
+                    return true;
+                }
+                if (node.inner.nodeMiddle.count > middleThreshold)
+                {
+                    return true;
+                }
+                return false;
             }
-            return node.count > 1;
+            return node.count > 2;
         }
 
         private void AddInternal(KdTreeHolder<T> holder, KdTreeNode<T> newParent)
@@ -229,6 +266,44 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             }
             result.rebalance.added = false;
             return result;
+        }
+
+        private void AssertConsistency()
+        {
+            // AssertConsistency(root);
+        }
+        private void AssertConsistency(KdTreeNode<T> node)
+        {
+            if (
+                node.parent != null &&
+                node.bounds.HasValue && 
+                !node.parent.bounds.Value.Contains(node.bounds.Value)
+            )
+            {
+                throw new Exception();
+            }
+            if (node.count > 0 != node.bounds.HasValue)
+            {
+                throw new Exception();
+            }
+            if (node.type == NodeType.Inner)
+            {
+                AssertConsistency(node.inner.nodeLess);
+                AssertConsistency(node.inner.nodeMiddle);
+                AssertConsistency(node.inner.nodeMore);
+            }
+            if (node.type == NodeType.Leaf)
+            {
+                KdTreeHolder<T> holder = node.leaf.holder;
+                while (holder != null)
+                {
+                    if (!node.bounds.Value.Contains(holder.fatRect))
+                    {
+                        
+                    }
+                    holder = holder.sibling.next;
+                }
+            }
         }
     }
 }

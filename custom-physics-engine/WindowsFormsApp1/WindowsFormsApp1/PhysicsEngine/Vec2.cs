@@ -11,6 +11,16 @@ namespace WindowsFormsApp1.PhysicsEngine
         public static readonly Vec2 X = new Vec2(1, 0);
         public static readonly Vec2 Y = new Vec2(0, 1);
 
+        public static Vec2 xy(float x, float y)
+        {
+            return new Vec2(x, y);
+        }
+
+        public static Vec2 fill(float x)
+        {
+            return xy(x, x);
+        }
+        
         public Vec2(float x, float y)
         {
             this.x = x;

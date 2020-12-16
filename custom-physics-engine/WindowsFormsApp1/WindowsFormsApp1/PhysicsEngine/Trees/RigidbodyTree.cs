@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using WindowsFormsApp1.PhysicsEngine.KDBoxTree;
+﻿using WindowsFormsApp1.PhysicsEngine.KDBoxTree;
 
 namespace WindowsFormsApp1.PhysicsEngine
 {
@@ -33,5 +31,18 @@ namespace WindowsFormsApp1.PhysicsEngine
             return rects.GetBodyFatRect(body);
         }
     }
+    
+    public class DummyRigidbodyIndex : DummySpatialIndex<Rigidbody>
+    {
+        private BoundingRects rects = new BoundingRects();
+        public override AaRect GetBodyFitRect(Rigidbody body)
+        {
+            return rects.GetBodyFitRect(body);
+        }
 
+        public override AaRect GetBodyFatRect(Rigidbody body)
+        {
+            return rects.GetBodyFatRect(body);
+        }
+    }
 }

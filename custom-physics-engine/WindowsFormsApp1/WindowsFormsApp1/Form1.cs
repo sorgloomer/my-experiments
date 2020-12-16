@@ -6,6 +6,8 @@ using System.Linq;
 using System.Timers;
 using System.Windows.Forms;
 using WindowsFormsApp1.PhysicsEngine;
+using WindowsFormsApp1.PhysicsEngine.KDBoxTree;
+using V = WindowsFormsApp1.PhysicsEngine.Vec2;
 
 namespace WindowsFormsApp1
 {
@@ -39,8 +41,8 @@ namespace WindowsFormsApp1
 
         private void Form1_MouseMove(object sender, MouseEventArgs e)
         {
-            _worldMouse = new Vec2(e.X - 800f, e.Y - 600) * (1/0.4f); // TODO
-            _viewMouse = new Vec2(e.X, e.Y);
+            _worldMouse = V.xy(e.X - 800f, e.Y - 600) * (1/0.4f); // TODO
+            _viewMouse = V.xy(e.X, e.Y);
             if (e.Button == MouseButtons.Left)
             {
                 _p1 = _worldMouse;
@@ -139,17 +141,71 @@ namespace WindowsFormsApp1
         {
             var treeRootDrawParams = new DrawnParams
             {
-                position = new Vec2((ClientSize.Width + 225) / 2, 10),
-                layersize = new Vec2(ClientSize.Width - 250, 15f),
+                position = V.xy((ClientSize.Width + 225) / 2, 10),
+                layersize = V.xy(ClientSize.Width - 250, 15f),
             };
             _hoveredNode = null;
             DrawTree(_world.tree.Root, treeRootDrawParams, treeRootDrawParams);
         }
 
+        private void DrawKdRect<T>(KdTreeNode<T> node)
+        {
+            if (node.bounds.With(out var bounds))
+            {
+                DrawRect(Pens.DarkGreen, bounds);
+                DrawKdRectSplits(node, bounds);
+            }
+        }
+
+        private void DrawKdRectSplits<T>(KdTreeNode<T> node, AaRect bounds)
+        {
+            Graphics g = _graphics;
+            if (node.type == NodeType.Inner)
+            {
+                Pen pen = Pens.DarkGray;
+                if (node.inner.axis == Axis.X)
+                {
+                    g.DrawLine(pen, node.inner.pivot, bounds.min.y, node.inner.pivot, bounds.max.y);
+                    DrawKdRectSplits(
+                        node.inner.nodeLess, 
+                        AaRect.mm(bounds.min, node.inner.pivot, bounds.max.y)
+                    );
+                    DrawKdRectSplits(
+                        node.inner.nodeMore, 
+                        AaRect.mm(node.inner.pivot, bounds.min.y, bounds.max)
+                    );
+                }
+                if (node.inner.axis == Axis.Y)
+                {
+                    g.DrawLine(pen, bounds.min.x, node.inner.pivot, bounds.max.x, node.inner.pivot);
+                    DrawKdRectSplits(
+                        node.inner.nodeLess, 
+                        AaRect.mm(bounds.min, bounds.max.x, node.inner.pivot)
+                    );
+                    DrawKdRectSplits(
+                        node.inner.nodeMore, 
+                        AaRect.mm(bounds.min.x, node.inner.pivot, bounds.max)
+                    );
+                }
+                DrawKdRect(node.inner.nodeMiddle);
+            }
+            if (node.type == NodeType.Leaf)
+            {
+                var holder = node.leaf.holder;
+                while (holder != null)
+                {
+                    //DrawRect(Pens.DarkRed, holder.fatRect.ExtendSides(V.fill(5)));
+                    holder = holder.sibling.next;
+                }
+            }
+        }
         private int DrawRects()
         {
             if (DrawAabbBoxesChecked) {
-                DrawRects(_world.tree.Root);
+                if (_world.tree.Root is KdTreeNode<Rigidbody> kdNode)
+                    DrawKdRect(kdNode);
+                else
+                    DrawRects(_world.tree.Root);
             }
             var list = new List<AabbTreeNode<Rigidbody>>();
             // _world.tree.PossibleCollisions(_world.tree.GetBodyFitRect(_world.tree.bodies.Last()), null, list);
@@ -235,14 +291,19 @@ namespace WindowsFormsApp1
         {
             if (node.Bounds.With(out var bounds))
             {
-                _graphics.DrawRectangle(
-                    pen,
-                    bounds.min.x,
-                    bounds.min.y,
-                    bounds.max.x - bounds.min.x,
-                    bounds.max.y - bounds.min.y
-                );
+                DrawRect(pen, bounds);
             }
+        }
+
+        private void DrawRect(Pen pen, AaRect rect)
+        {
+            _graphics.DrawRectangle(
+                pen,
+                rect.min.x,
+                rect.min.y,
+                rect.max.x - rect.min.x,
+                rect.max.y - rect.min.y
+            );
         }
 
         private Color TreeColor(AabbTreeNode<Rigidbody> node)

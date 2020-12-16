@@ -6,6 +6,7 @@ namespace WindowsFormsApp1.PhysicsEngine
     {
         public float fatSizeFactor = 0.2f;
         public float fatVelocityFactor = 0.2f;
+        public float fatVelocityMaxFactor = 2f;
 
         public AaRect GetBodyFitRect(Rigidbody body)
         {
@@ -20,7 +21,9 @@ namespace WindowsFormsApp1.PhysicsEngine
         {
             var rect = GetBodyFitRect(body);
             var fat = rect.ExtendSides(rect.GetSize() * fatSizeFactor);
-            return AaRect.Merge(fat, fat.Translate(body.positionVelocity * fatVelocityFactor));
+            var maxSize = fat.GetMaxSize() * fatVelocityMaxFactor;
+            var translation = (body.positionVelocity * fatVelocityFactor).Clamp(maxSize);
+            return AaRect.Merge(fat, fat.Translate(translation));
         }
     }
 }

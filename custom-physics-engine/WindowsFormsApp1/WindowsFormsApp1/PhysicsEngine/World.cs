@@ -5,15 +5,15 @@ namespace WindowsFormsApp1.PhysicsEngine
 {
     public class World
     {
-        public ISpatialTree2D<Rigidbody> tree;
+        public ISpatialIndex<Rigidbody> tree;
         public List<ContactHalf> contacts = new List<ContactHalf>();
         public List<Vec2> notables = new List<Vec2>();
         private int substeps = 5;
-        private Vec2 gravity = new Vec2(0, 200);
-        private int PARTICLE_COUNT = 500;
-        public float positionDamping = 0.20f;
-        public float angularDamping = 0.20f;
-        public float maxPositionVelocity = 1000f;
+        private Vec2 gravity = new Vec2(0, 800);
+        private int PARTICLE_COUNT = 100;
+        public float positionDamping = 0.10f;
+        public float angularDamping = 0.10f;
+        public float maxPositionVelocity = 4000f;
         public float maxAngularVelocity = 40 * Mathf.TWO_PI;
         private List<Rigidbody> tempList = new List<Rigidbody>();
 
@@ -199,7 +199,7 @@ namespace WindowsFormsApp1.PhysicsEngine
         {
             return -Mathf.Floor(a / b) * b;
         }
-        public World(ISpatialTree2D<Rigidbody> tree)
+        public World(ISpatialIndex<Rigidbody> tree)
         {
             var bodies = new List<Rigidbody>()
             {
@@ -222,6 +222,7 @@ namespace WindowsFormsApp1.PhysicsEngine
                     },
                 },
             };
+            float size = 8;
             for (var i = 0; i < PARTICLE_COUNT; i++)
             {
                 bodies.Add(new Rigidbody {
@@ -229,9 +230,9 @@ namespace WindowsFormsApp1.PhysicsEngine
                     position = new Vec2(-50 + 15 * (i % 8), 0 - 5 * i),
                     fixture = new Capsule()
                     {
-                        p0 = new Vec2(-4, 0), 
-                        p1 = new Vec2(4, 0),
-                        radius = 4,
+                        p0 = new Vec2(-size, 0), 
+                        p1 = new Vec2(+size, 0),
+                        radius = size,
                     },
                     invMass = 1,
                     invAngularMass = 0.03f,
@@ -245,11 +246,11 @@ namespace WindowsFormsApp1.PhysicsEngine
             bodies[bodies.Count - 2].fixture.p0 *= 2f;
             bodies[bodies.Count - 2].fixture.p1 *= 2f;
             
-            bodies[bodies.Count - 1].invMass *= 0f;
-            bodies[bodies.Count - 1].invAngularMass *= 0.01f;
-            bodies[bodies.Count - 1].fixture.radius *= 3f;
-            bodies[bodies.Count - 1].fixture.p0 *= 8f;
-            bodies[bodies.Count - 1].fixture.p1 *= 8f;
+            bodies[bodies.Count - 1].invMass = 0f;
+            bodies[bodies.Count - 1].invAngularMass = 0.0005f;
+            bodies[bodies.Count - 1].fixture.radius = 120f;
+            bodies[bodies.Count - 1].fixture.p0 = new Vec2(-100, 0);
+            bodies[bodies.Count - 1].fixture.p1 = new Vec2(100, 0);
             
             this.tree = tree;
             var counter = 0;
