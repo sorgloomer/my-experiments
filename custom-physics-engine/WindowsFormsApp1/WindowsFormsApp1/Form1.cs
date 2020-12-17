@@ -16,6 +16,7 @@ namespace WindowsFormsApp1
         private Bitmap _bitmap;
         private Vec2 _viewMouse, _worldMouse, _p1;
         private Graphics _graphics;
+        private Random random = new Random();
         
         private Stopwatch stopwatch = Stopwatch.StartNew();
         private int fpsCounter, fps;
@@ -23,6 +24,9 @@ namespace WindowsFormsApp1
         
         private World _world = new World(new RigidbodyKdTree());
         private bool drawflag = true;
+        
+        private HashSet<Rigidbody> highlightedBodies = new HashSet<Rigidbody>();
+        private Rigidbody controlledBody = null;
 
         private IRectTreeNode _hoveredNode = null;
         
@@ -63,12 +67,30 @@ namespace WindowsFormsApp1
 
         private void UpdatePhysics()
         {
-            var b = _world.Bodies.Last();
-            b.position = _worldMouse;
-            b.positionVelocity = Vec2.Zero;
-            b.invMass = 0;
-            _world.Update(b);
+            controlledBody = _world.Bodies.Last();
+            controlledBody.position = _worldMouse;
+            controlledBody.positionVelocity = Vec2.Zero;
+            controlledBody.invMass = 0;
+            _world.Update(controlledBody);
             _world.Step(0.02f);
+            
+            foreach (var body in _world.Bodies)
+            {
+                if (body.position.y > 1000)
+                {
+                    body.position = new Vec2(RandRange(-250, 250), RandRange(-900, -400));
+                    body.positionVelocity = V.Zero;
+                }
+            }
+            
+            highlightedBodies.Clear();
+            _world.tree.TraverseOverlapping(controlledBody, b2 => highlightedBodies.Add(b2));
+            highlightedBodies.Remove(controlledBody);
+        }
+
+        private float RandRange(float min, float max)
+        {
+            return (float) random.NextDouble() * (max - min) + min;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -112,7 +134,7 @@ namespace WindowsFormsApp1
             var bodyi = 0;
             foreach (var body in _world.Bodies)
             {
-                Pen color = body.type == BodyType.Dynamic ? Pens.Aqua : Pens.White; 
+                var color = getBodyColor(body);
                 DrawCapsule(body.fixtureCache, color);
 
                 if (DebugDrawContacts) {
@@ -135,6 +157,17 @@ namespace WindowsFormsApp1
             }
             _graphics.DrawString($"{fps:F0} FPS", Font, Brushes.White, 5, 5);
             _graphics.DrawString($"AABB: {numratio} / {-1/*_world.tree.root.depth*/}", Font, Brushes.White, 5, 20);
+        }
+
+        private Pen getBodyColor(Rigidbody body)
+        {
+            if (body == controlledBody)
+                return Pens.LawnGreen;
+            if (highlightedBodies.Contains(body))
+                return Pens.Red;
+            if (body.type == BodyType.Dynamic)
+                return Pens.Aqua;
+            return Pens.White;
         }
 
         private void DrawAabbTree()
@@ -187,7 +220,7 @@ namespace WindowsFormsApp1
                         AaRect.mm(bounds.min.x, node.inner.pivot, bounds.max)
                     );
                 }
-                DrawKdRect(node.inner.nodeMiddle);
+                DrawKdRect(node.inner.nodeBoth);
             }
             if (node.type == NodeType.Leaf)
             {
@@ -321,15 +354,6 @@ namespace WindowsFormsApp1
                 lastFpsTurnover = current;
                 fps = fpsCounter;
                 fpsCounter = 0;
-            }
-
-            foreach (var body in _world.Bodies)
-            {
-                if (body.position.y > 1000)
-                {
-                    body.position = new Vec2(0, -150);
-                    body.positionVelocity = Vec2.Y * 500;
-                }
             }
         }
 

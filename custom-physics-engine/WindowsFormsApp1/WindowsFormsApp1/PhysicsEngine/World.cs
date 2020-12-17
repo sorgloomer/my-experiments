@@ -10,12 +10,14 @@ namespace WindowsFormsApp1.PhysicsEngine
         public List<Vec2> notables = new List<Vec2>();
         private int substeps = 5;
         private Vec2 gravity = new Vec2(0, 800);
-        private int PARTICLE_COUNT = 100;
+        private int PARTICLE_COUNT = 500;
+        float particleSize = 20;
         public float positionDamping = 0.10f;
         public float angularDamping = 0.10f;
         public float maxPositionVelocity = 4000f;
         public float maxAngularVelocity = 40 * Mathf.TWO_PI;
         private List<Rigidbody> tempList = new List<Rigidbody>();
+        private Action<Rigidbody> _addToTempList;
 
         public void Update(Rigidbody rigidbody)
         {
@@ -66,7 +68,7 @@ namespace WindowsFormsApp1.PhysicsEngine
                 foreach (var body0 in tree.GetAll())
                 {
                     tempList.Clear();
-                    tree.TraverseOverlapping(body0, tempList.Add);
+                    tree.TraverseOverlapping(body0, _addToTempList);
 
                     foreach (var body1 in tempList)
                     {
@@ -74,7 +76,7 @@ namespace WindowsFormsApp1.PhysicsEngine
                         ClosestPoints p = CapsuleCache.Collide(
                             body0.fixtureCache,
                             body1.fixtureCache,
-                            vs => notables.AddRange(vs)
+                            null
                         );
 
                         if (!p.degenerate)
@@ -195,12 +197,19 @@ namespace WindowsFormsApp1.PhysicsEngine
             });
         }
 
+        private void AddToTempList(Rigidbody rb)
+        {
+            tempList.Add(rb);
+        }
+
         public static float DiffToMod(float a, float b)
         {
             return -Mathf.Floor(a / b) * b;
         }
+
         public World(ISpatialIndex<Rigidbody> tree)
         {
+            _addToTempList = AddToTempList;
             var bodies = new List<Rigidbody>()
             {
                 new Rigidbody()
@@ -222,7 +231,6 @@ namespace WindowsFormsApp1.PhysicsEngine
                     },
                 },
             };
-            float size = 8;
             for (var i = 0; i < PARTICLE_COUNT; i++)
             {
                 bodies.Add(new Rigidbody {
@@ -230,9 +238,9 @@ namespace WindowsFormsApp1.PhysicsEngine
                     position = new Vec2(-50 + 15 * (i % 8), 0 - 5 * i),
                     fixture = new Capsule()
                     {
-                        p0 = new Vec2(-size, 0), 
-                        p1 = new Vec2(+size, 0),
-                        radius = size,
+                        p0 = new Vec2(-particleSize, 0), 
+                        p1 = new Vec2(+particleSize, 0),
+                        radius = particleSize,
                     },
                     invMass = 1,
                     invAngularMass = 0.03f,
@@ -246,11 +254,11 @@ namespace WindowsFormsApp1.PhysicsEngine
             bodies[bodies.Count - 2].fixture.p0 *= 2f;
             bodies[bodies.Count - 2].fixture.p1 *= 2f;
             
-            bodies[bodies.Count - 1].invMass = 0f;
-            bodies[bodies.Count - 1].invAngularMass = 0.0005f;
-            bodies[bodies.Count - 1].fixture.radius = 120f;
-            bodies[bodies.Count - 1].fixture.p0 = new Vec2(-100, 0);
-            bodies[bodies.Count - 1].fixture.p1 = new Vec2(100, 0);
+            // bodies[bodies.Count - 1].invMass = 0f;
+            // bodies[bodies.Count - 1].invAngularMass = 0.00005f;
+            // bodies[bodies.Count - 1].fixture.radius = 120f;
+            // bodies[bodies.Count - 1].fixture.p0 = new Vec2(-100, 0);
+            // bodies[bodies.Count - 1].fixture.p1 = new Vec2(100, 0);
             
             this.tree = tree;
             var counter = 0;

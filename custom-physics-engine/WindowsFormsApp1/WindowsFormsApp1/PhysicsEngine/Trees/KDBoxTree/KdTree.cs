@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 {
@@ -12,9 +13,19 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
         private int rebalanceDivider = 10;
         private int rebalanceCounter = 0;
         
-        private RebalanceQueue<T> rebalance;
+        private KdTreeNode<T> rebalanceQueueSentinel;
+
+        private List<KdTreeNode<T>> allocationCacheNode = new List<KdTreeNode<T>>();
+        private List<KdTreeHolder<T>> allocationCacheHolder = new List<KdTreeHolder<T>>();
         
         public List<KdTreeHolder<T>> tempHolderList = new List<KdTreeHolder<T>>();
+
+        public KdTree()
+        {
+            rebalanceQueueSentinel = new KdTreeNode<T>();
+            rebalanceQueueSentinel.rebalance.prev = rebalanceQueueSentinel;
+            rebalanceQueueSentinel.rebalance.next = rebalanceQueueSentinel;
+        }
 
         public override IRectTreeNode Root => root;
 
@@ -31,6 +42,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 RemoveInternal(holder);
                 leaves.Remove(body);
                 RefreshAndMarkParents(oldParent);
+                DisposeHolder(holder);
                 return true;
             }
             return false;
@@ -62,7 +74,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                     TraverseOverlapping(node.inner.nodeLess, rect, action);
                 if (pos != ChildPosition.Less)
                     TraverseOverlapping(node.inner.nodeMore, rect, action);
-                TraverseOverlapping(node.inner.nodeMiddle, rect, action);
+                TraverseOverlapping(node.inner.nodeBoth, rect, action);
             }
         }
 
@@ -81,12 +93,10 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 return false;
             }
 
-            holder = new KdTreeHolder<T>()
-            {
-                body = body,
-                fitRect = GetBodyFatRect(body),
-                fatRect = GetBodyFitRect(body),
-            };
+            holder = MakeHolder();
+            holder.body = body;
+            holder.fitRect = GetBodyFatRect(body);
+            holder.fatRect = GetBodyFitRect(body);
             leaves[body] = holder;
             AddAndRefreshInternal(holder);
             RebalanceOne();
@@ -111,7 +121,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 {
                     return;
                 }
-                if (!node.deleted && IsNodeUnbalanced(node))
+                if (IsNodeUnbalanced(node))
                 {
                     AssertConsistency();
                     node.Rebalance(this);
@@ -166,9 +176,9 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 
         public void MarkRebalanceIfNeeded(KdTreeNode<T> node)
         {
-            if (!node.rebalance.added && IsNodeUnbalanced(node))
+            if (!node.rebalance.Added && IsNodeUnbalanced(node))
             {
-                DeferRebalance(node);
+                EnqueueRebalanceOnce(node);
             }
         }
 
@@ -190,7 +200,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 {
                     return true;
                 }
-                if (node.inner.nodeMiddle.count > middleThreshold)
+                if (node.inner.nodeBoth.count > middleThreshold)
                 {
                     return true;
                 }
@@ -231,40 +241,85 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             return node;
         }
         
-        private bool DeferRebalance(KdTreeNode<T> node)
+        private bool EnqueueRebalanceOnce(KdTreeNode<T> node)
         {
-            if (node.rebalance.added)
+            if (node.rebalance.Added)
             {
                 return false;
             }
-            node.rebalance.added = true;
-            node.rebalance.next = null;
-            if (rebalance.last != null)
+            node.rebalance = new RebalanceLink<T>()
             {
-                rebalance.last.rebalance.next = node;
-            }
-            else
-            {
-                rebalance.first = node;
-            }
-            rebalance.last = node;
+                prev = rebalanceQueueSentinel.rebalance.prev,
+                next = rebalanceQueueSentinel
+            };
+            node.rebalance.prev.rebalance.next = node;
+            node.rebalance.next.rebalance.prev = node;
             return true;
         }
         
         private KdTreeNode<T> DequeueRebalanceQueue()
         {
-            var result = rebalance.first;
-            if (result == null)
+            var result = rebalanceQueueSentinel.rebalance.next;
+            if (result == rebalanceQueueSentinel)
             {
                 return null;
             }
-            var newfirst = result.rebalance.next; 
-            rebalance.first = newfirst;
-            if (newfirst == null)
-            {
-                rebalance.last = null;
-            }
-            result.rebalance.added = false;
+            RemoveFromRebalanceQueue(result);
+            return result;
+        }
+
+        internal KdTreeHolder<T> MakeHolder()
+        {
+            var holder = Pop(allocationCacheHolder) ?? new KdTreeHolder<T>();
+            holder.sibling.prev = null;
+            holder.sibling.next = null;
+            return holder;
+        }
+        internal void DisposeHolder(KdTreeHolder<T> holder)
+        {
+            holder.sibling.prev = null;
+            holder.sibling.next = null;
+            allocationCacheHolder.Add(holder);
+        }
+        internal KdTreeNode<T> MakeLeafNode(KdTreeNode<T> parent)
+        {
+            var node = Pop(allocationCacheNode) ?? new KdTreeNode<T>();
+            node.type = NodeType.Leaf;
+            node.leaf.holder = null;
+            node.parent = parent;
+            node.count = 0;
+            node.bounds = null;
+            node.refresh = 0;
+            return node;
+        }
+        internal void DisposeNode(KdTreeNode<T> node)
+        {
+            RemoveFromRebalanceQueue(node);
+            node.parent = null;
+            node.inner.nodeLess = null;
+            node.inner.nodeBoth = null;
+            node.inner.nodeMore = null;
+            node.leaf.holder = null;
+            allocationCacheNode.Add(node);
+        }
+
+        private void RemoveFromRebalanceQueue(KdTreeNode<T> node)
+        {
+            var oldprev = node.rebalance.prev;
+            var oldnext = node.rebalance.next;
+            if (oldprev != null) oldprev.rebalance.next = oldnext;
+            if (oldnext != null) oldnext.rebalance.prev = oldprev;
+            node.rebalance.prev = null;
+            node.rebalance.next = null;
+        }
+
+        private static U Pop<U>(List<U> list)
+        {
+            int count = list.Count;
+            if (count <= 0) return default;
+            int idx = count - 1;
+            var result = list[idx];
+            list.RemoveAt(idx);
             return result;
         }
 
@@ -289,7 +344,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             if (node.type == NodeType.Inner)
             {
                 AssertConsistency(node.inner.nodeLess);
-                AssertConsistency(node.inner.nodeMiddle);
+                AssertConsistency(node.inner.nodeBoth);
                 AssertConsistency(node.inner.nodeMore);
             }
             if (node.type == NodeType.Leaf)

@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
 {
@@ -11,7 +10,6 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
         public int count;
         public int refresh = 0;
         public RebalanceLink<T> rebalance;
-        public bool deleted = false;
 
         public NodeType type = NodeType.Leaf;
         public NodeInner<T> inner;
@@ -27,7 +25,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 case ChildPosition.More:
                     return inner.nodeMore;
                 default:
-                    return inner.nodeMiddle;
+                    return inner.nodeBoth;
             }
         }
         public ChildPosition DetermineInnerNodePosition(AaRect rect)
@@ -70,7 +68,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 }
                 return newBounds;
             }
-            return AaRects.MergeNullable(inner.nodeLess.bounds, inner.nodeMiddle.bounds, inner.nodeMore.bounds);
+            return AaRects.MergeNullable(inner.nodeLess.bounds, inner.nodeBoth.bounds, inner.nodeMore.bounds);
         }
 
         public void Rebalance(KdTree<T> tree)
@@ -81,11 +79,11 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
                 {
                     if (count <= 1)
                     {
-                        ConvertToLeaf();
+                        ConvertToLeaf(tree);
                     }
                     else
                     {
-                        ConvertToLeaf();
+                        ConvertToLeaf(tree);
                         ConvertToInnerMaybe(tree); // TODO: proper progressive rebalancing
                     }
                     
@@ -134,9 +132,9 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             type = NodeType.Inner;
             inner.axis = foundAxis;
             inner.pivot = pivot;
-            inner.nodeMiddle = new KdTreeNode<T> { parent = this };
-            inner.nodeLess = new KdTreeNode<T> { parent = this };
-            inner.nodeMore = new KdTreeNode<T> { parent = this };
+            inner.nodeBoth = tree.MakeLeafNode(this);
+            inner.nodeLess = tree.MakeLeafNode(this);
+            inner.nodeMore = tree.MakeLeafNode(this);
 
             var holder = leaf.holder;
             leaf.holder = null;
@@ -150,7 +148,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             }
             
             PostProcessNewChildNode(tree, inner.nodeLess);
-            PostProcessNewChildNode(tree, inner.nodeMiddle);
+            PostProcessNewChildNode(tree, inner.nodeBoth);
             PostProcessNewChildNode(tree, inner.nodeMore);
         }
 
@@ -245,22 +243,22 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             return axisMax - axisMin;
         }
 
-        private void ConvertToLeaf()
+        private void ConvertToLeaf(KdTree<T> tree)
         {
             leaf.holder = null;
-            MoveAllHoldersWhileDestroying(this);
+            DisposeChildrenAndMoveHolders(this, tree);
             type = NodeType.Leaf;
         }
 
-        private void MoveAllHoldersWhileDestroying(KdTreeNode<T> newLeaf)
+        private void DisposeChildrenAndMoveHolders(KdTreeNode<T> newLeaf, KdTree<T> tree)
         {
             switch (type)
             {
                 case NodeType.Inner:
                 {
-                    DestroyInnerChild(ref inner.nodeLess, newLeaf);
-                    DestroyInnerChild(ref inner.nodeMiddle, newLeaf);
-                    DestroyInnerChild(ref inner.nodeMore, newLeaf);
+                    DisposeAndMoveHolders(ref inner.nodeLess, newLeaf, tree);
+                    DisposeAndMoveHolders(ref inner.nodeBoth, newLeaf, tree);
+                    DisposeAndMoveHolders(ref inner.nodeMore, newLeaf, tree);
                 } break;
                 case NodeType.Leaf:
                 {
@@ -276,13 +274,13 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             }
         }
 
-        private void DestroyInnerChild(ref KdTreeNode<T> node, KdTreeNode<T> newLeaf)
+        private void DisposeAndMoveHolders(ref KdTreeNode<T> node, KdTreeNode<T> newLeaf, KdTree<T> tree)
         {
-            node.deleted = true;
-            node.MoveAllHoldersWhileDestroying(newLeaf);
+            node.DisposeChildrenAndMoveHolders(newLeaf, tree);
+            tree.DisposeNode(node);
             node = null;
         }
-
+        
         public AaRect? Bounds => bounds;
 
         public IEnumerable<IRectTreeNode> Children()
@@ -300,7 +298,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
             else
             {
                 yield return inner.nodeLess;
-                yield return inner.nodeMiddle;
+                yield return inner.nodeBoth;
                 yield return inner.nodeMore;
             }
         }
@@ -385,7 +383,7 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
         public Axis axis;
         public KdTreeNode<T> nodeLess;
         public KdTreeNode<T> nodeMore;
-        public KdTreeNode<T> nodeMiddle;
+        public KdTreeNode<T> nodeBoth;
     }
     public struct NodeLeaf<T>
     {
@@ -400,8 +398,10 @@ namespace WindowsFormsApp1.PhysicsEngine.KDBoxTree
     
     public struct RebalanceLink<T>
     {
+        public KdTreeNode<T> prev;
         public KdTreeNode<T> next;
-        public bool added;
+
+        public bool Added => prev != null;
     }
     
     public struct RebalanceQueue<T>
